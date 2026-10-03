@@ -1,9 +1,9 @@
-version: '3.8'
+version: "3.8"
 
 services:
   db:
     image: postgres:17
-    container_name: tegnet-db
+    container_name: teg-go-db
     environment:
       - POSTGRES_USER=teg
       - POSTGRES_PASSWORD=teg
@@ -12,7 +12,7 @@ services:
       # Expuesto para desarrollo: el server local usa localhost:5440 por defecto
       - "5440:5432"
     volumes:
-      - tegnet-db:/var/lib/postgresql/data
+      - teg-go-db:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U teg -d teg"]
       interval: 2s
@@ -20,11 +20,11 @@ services:
       retries: 15
     restart: unless-stopped
 
-  tegnet:
+  teg-go:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: tegnet-game
+    container_name: teg-go-game
     ports:
       - "8080:8080"
     environment:
@@ -37,4 +37,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  tegnet-db:
+  teg-go-db:

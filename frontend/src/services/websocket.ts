@@ -4,6 +4,8 @@ type StatusHandler = (connected: boolean) => void;
 // Conexión con el server del juego. Se autentica con la cookie de sesión.
 // Si se corta, reintenta solo y vuelve a entrar a la sala en la que estaba
 // (el server le devuelve su lugar).
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+
 class WebSocketService {
   private ws: WebSocket | null = null;
   private listeners: Set<MessageHandler> = new Set();
@@ -16,6 +18,12 @@ class WebSocketService {
   private room: { code: string; password?: string; spectate?: boolean } | null = null;
 
   constructor() {
+    if (apiBaseUrl) {
+      const wsBaseUrl = apiBaseUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');
+      this.serverUrl = `${wsBaseUrl}/ws`;
+      return;
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.serverUrl = `${protocol}//${window.location.host}/ws`;
   }

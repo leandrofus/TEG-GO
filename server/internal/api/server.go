@@ -65,7 +65,7 @@ func (s *Server) Routes() http.Handler {
 	if _, err := os.Stat(staticDir); err == nil {
 		mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 	}
-	return mux
+	return withCORS(mux)
 }
 
 // ---------------------------------------------------------------------------
@@ -90,6 +90,22 @@ func (s *Server) identity(r *http.Request) (lobby.Identity, bool) {
 	return lobby.Identity{UserID: sess.UserID, Token: sess.Token, Name: sess.Name, Guest: sess.Guest}, true
 }
 
+func cookieOptions(r *http.Request, maxAge int) *http.Cookie {
+	origin := r.Header.Get("Origin")
+	secure := r.TLS != nil || strings.HasPrefix(origin, "https://")
+	sameSite := http.SameSiteLaxMode
+	if secure && origin != "" {
+		sameSite = http.SameSiteNoneMode
+	}
+	return &http.Cookie{
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: sameSite,
+	}
+}
+
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int64, guestName string, ttl time.Duration) (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
@@ -99,15 +115,10 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int
 	if err := s.store.CreateSession(r.Context(), token, userID, guestName, ttl); err != nil {
 		return "", err
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   int(ttl.Seconds()),
-		HttpOnly: true,
-		Secure:   r.TLS != nil,
-		SameSite: http.SameSiteLaxMode,
-	})
+	cookie := cookieOptions(r, int(ttl.Seconds()))
+	cookie.Name = sessionCookie
+	cookie.Value = token
+	http.SetCookie(w, cookie)
 	return token, nil
 }
 
@@ -184,7 +195,10 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(sessionCookie); err == nil {
 		_ = s.store.DeleteSession(r.Context(), cookie.Value)
 	}
-	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true})
+	cookie := cookieOptions(r, -1)
+	cookie.Name = sessionCookie
+	cookie.Value = ""
+	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -227,6 +241,23 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<16)
