@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-amber-500 selection:text-slate-950;
+  }
+}
+
+/* Custom map badge glow animations */
+.badge-glow {
+  filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.6));
+}
+
+.country-path {
+  transition: fill 0.2s ease, stroke 0.2s ease, filter 0.2s ease;
+  cursor: pointer;
+}
+
+.country-path:hover {
+  filter: brightness(1.25);
+  stroke-width: 2.5px;
+}
+
+/* Barra de cierre automático del modal de combate */
+@keyframes combat-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* Eventos en el mapa ------------------------------------------------------ */
+
+/* Indicador ▲/▼ que sube y se desvanece sobre la ficha */
+@keyframes map-delta {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -110%) scale(0.8);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -160%) scale(1);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -200%);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -240%);
+  }
+}
+.map-delta {
+  animation-name: map-delta;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+/* Destello del territorio que cambió */
+@keyframes map-event-flash {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  25% {
+    filter: brightness(1.35);
+  }
+}
+.map-event-flash {
+  animation: map-event-flash 1.1s ease-out;
+}
+
+/* Barrido del color del nuevo dueño, desde el lado del ataque */
+@keyframes map-owner-wipe {
+  from {
+    clip-path: circle(0% at var(--wipe-at));
+  }
+  to {
+    clip-path: circle(300% at var(--wipe-at));
+  }
+}
+.map-owner-wipe {
+  animation: map-owner-wipe 1s ease-in forwards;
+}
+
+/* Trazo animado de la flecha de ataque */
+@keyframes map-attack-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+.map-attack-dash {
+  animation: map-attack-dash 0.6s linear infinite;
+}
