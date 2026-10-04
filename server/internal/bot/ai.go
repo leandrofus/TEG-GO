@@ -111,7 +111,13 @@ func (b *BotRunner) TakeStep(board *game.GameBoard) bool {
 	}
 
 	switch board.CurrentPhase {
-	case game.PhaseInitialPlacement1, game.PhaseInitialPlacement2, game.PhaseAddArmies:
+	case game.PhaseInitialPlacement1, game.PhaseInitialPlacement2:
+		return b.stepPlacement(board)
+	case game.PhaseAddArmies:
+		if p.TroopsToPlace <= 0 {
+			board.AdvancePhaseAfterPlacement()
+			return true
+		}
 		return b.stepPlacement(board)
 	case game.PhaseTradeCards:
 		// Canjea si tiene una combinación válida; si no, sigue

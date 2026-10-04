@@ -88,12 +88,20 @@ func (g *GameBoard) StartTurn(color Color) {
 		c.MovedThisTurn = 0
 	}
 
-	bonus, breakdown := g.CalculateTroopBonus(color)
+	bonus := 0
+	breakdown := map[string]int{}
+	if g.Round > 1 {
+		bonus, breakdown = g.CalculateTroopBonus(color)
+	}
 	p.TroopsToPlace = bonus
 	p.TroopBonusMap = breakdown
 
 	g.CurrentPhase = PhaseTradeCards
-	g.AddLog(fmt.Sprintf("Comienza el turno de %s. Recibe %d tropas.", p.Name, bonus))
+	if bonus > 0 {
+		g.AddLog(fmt.Sprintf("Comienza el turno de %s. Recibe %d tropas.", p.Name, bonus))
+	} else {
+		g.AddLog(fmt.Sprintf("Comienza el turno de %s. Ya recibió las tropas iniciales de la ronda de placement.", p.Name))
+	}
 }
 
 // SkipTrade moves player from Trade phase to AddArmies phase
@@ -103,6 +111,11 @@ func (g *GameBoard) SkipTrade(color Color) error {
 	}
 	if g.CurrentPhase != PhaseTradeCards {
 		return fmt.Errorf("fase incorrecta para canje")
+	}
+	if g.CurrentPlayer().TroopsToPlace == 0 {
+		g.CurrentPhase = PhaseAttack
+		g.AddLog(fmt.Sprintf("%s no tiene ejércitos para colocar y pasa a la fase de ataque.", g.CurrentPlayer().Name))
+		return nil
 	}
 	g.CurrentPhase = PhaseAddArmies
 	g.AddLog(fmt.Sprintf("%s pasa a la fase de colocación de tropas.", g.CurrentPlayer().Name))

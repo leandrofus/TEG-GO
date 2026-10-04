@@ -192,3 +192,48 @@ func TestRoundAdvancesWhenOrderWraps(t *testing.T) {
 		t.Fatalf("ronda %d, turno %d; se esperaba ronda 2 y turno 0", g.Round, g.CurrentTurnIndex)
 	}
 }
+
+func TestInitialPlacementDoesNotGrantTurnBonusOnFirstRegularRound(t *testing.T) {
+	players := map[Color]*PlayerState{
+		ColorRed:  {Color: ColorRed, Name: "Rojo", IsAlive: true},
+		ColorBlue: {Color: ColorBlue, Name: "Azul", IsAlive: true},
+	}
+	g := NewGameBoard(players, []Color{ColorRed, ColorBlue})
+
+	for g.CurrentPhase == PhaseInitialPlacement1 || g.CurrentPhase == PhaseInitialPlacement2 {
+		if !g.CurrentPlayer().IsAlive {
+			t.Fatal("el jugador actual está eliminado")
+		}
+		for _, country := range g.Countries {
+			if country.Owner == g.CurrentPlayer().Color {
+				if err := g.PlaceTroops(g.CurrentPlayer().Color, country.ID, 1); err == nil {
+					break
+				}
+			}
+		}
+		if g.CurrentPlayer().TroopsToPlace > 0 {
+			for _, country := range g.Countries {
+				if country.Owner == g.CurrentPlayer().Color {
+					if err := g.PlaceTroops(g.CurrentPlayer().Color, country.ID, g.CurrentPlayer().TroopsToPlace); err == nil {
+						break
+					}
+				}
+			}
+		}
+		if g.CurrentPhase == PhaseInitialPlacement1 || g.CurrentPhase == PhaseInitialPlacement2 {
+			if g.CurrentPlayer().TroopsToPlace == 0 {
+				continue
+			}
+		}
+	}
+
+	if g.Round != 1 {
+		t.Fatalf("ronda = %d, se esperaba 1 tras finalizar el placement inicial", g.Round)
+	}
+	if got := g.CurrentPlayer().TroopsToPlace; got != 0 {
+		t.Fatalf("tropas del primer turno normal = %d, se esperaba 0", got)
+	}
+	if g.CurrentPhase != PhaseTradeCards {
+		t.Fatalf("fase = %s, se esperaba %s", g.CurrentPhase, PhaseTradeCards)
+	}
+}
