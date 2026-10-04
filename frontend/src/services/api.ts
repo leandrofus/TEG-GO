@@ -32,4 +32,5 @@ export const api = {
   rooms: () => request<RoomSummary[]>('GET', '/api/rooms'),
   createRoom: (name: string, maxPlayers: number, password: string) =>
     request<{ code: string }>('POST', '/api/rooms', { name, maxPlayers, password }),
+  deleteRoom: (code: string) => request<void>('DELETE', `/api/rooms/${encodeURIComponent(code)}`),
 };

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { CardState, CountryDef } from '../../types/game';
+import { FIGURE_LABELS } from '../../types/game';
 import { wsService } from '../../services/websocket';
 import { Layers, Coins, X, Check } from 'lucide-react';
 
@@ -38,13 +39,6 @@ export const CardModal: React.FC<CardModalProps> = ({
 
   const handleCash = (countryId: number) => {
     wsService.send('CASH_CARD', { countryId });
-  };
-
-  const figureIcons: Record<string, string> = {
-    cannon: '💣 Cañón',
-    balloon: '🎈 Globo',
-    ship: '⛵ Barco',
-    wildcard: '⭐ Comodín',
   };
 
   return (
@@ -102,7 +96,7 @@ export const CardModal: React.FC<CardModalProps> = ({
 
                   <div className="flex items-center justify-between border-t border-slate-800/80 pt-2">
                     <span className="text-xs font-semibold text-amber-300">
-                      {figureIcons[c.figure] || c.figure}
+                      {FIGURE_LABELS[c.figure] || c.figure}
                     </span>
                     {!c.cashed ? (
                       <button

@@ -284,6 +284,39 @@ func (r *Room) toBot(seat *Seat, reason string) {
 	}
 }
 
+// canDelete dice si id puede borrar la sala: tiene que ser el anfitrión y no
+// puede quedar ningún otro jugador humano (los bots no cuentan).
+func (r *Room) canDelete(id Identity) bool {
+	h := r.host()
+	return h != nil && h.belongsTo(id) && r.humans() == 1
+}
+
+// Delete borra la sala a pedido del anfitrión. A quien siga conectado
+// (el anfitrión en otra ventana o los espectadores) se lo saca de la sala.
+func (r *Room) Delete(id Identity) error {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+	if r.closed {
+		return fmt.Errorf("la sala ya no existe")
+	}
+	if !r.canDelete(id) {
+		return fmt.Errorf("solo el anfitrión puede borrar la sala, y únicamente si no hay otros jugadores")
+	}
+	msg := map[string]string{"type": "KICKED", "message": "La sala fue borrada."}
+	for _, s := range r.Seats {
+		if s.conn != nil {
+			s.conn.SendJSON(msg)
+			s.conn = nil
+		}
+	}
+	for c := range r.spectators {
+		c.SendJSON(msg)
+		delete(r.spectators, c)
+	}
+	r.close()
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Acciones del anfitrión
 
@@ -617,6 +650,7 @@ type Summary struct {
 	CreatedAt  time.Time  `json:"createdAt"`
 	Seats      []SeatView `json:"seats"`
 	Mine       bool       `json:"mine"`
+	CanDelete  bool       `json:"canDelete"`
 }
 
 func (r *Room) Summary(viewer Identity) Summary {
@@ -642,5 +676,6 @@ func (r *Room) Summary(viewer Identity) Summary {
 			s.Mine = true
 		}
 	}
+	s.CanDelete = r.canDelete(viewer)
 	return s
 }

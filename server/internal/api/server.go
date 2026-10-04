@@ -47,6 +47,7 @@ func (s *Server) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/rooms", s.handleListRooms)
 	mux.HandleFunc("POST /api/rooms", s.handleCreateRoom)
+	mux.HandleFunc("DELETE /api/rooms/{code}", s.handleDeleteRoom)
 
 	mux.HandleFunc("GET /api/game/data", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -240,6 +241,24 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"code": room.Code})
 }
 
+func (s *Server) handleDeleteRoom(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.identity(r)
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "No iniciaste sesión.")
+		return
+	}
+	room, err := s.rooms.Get(r.PathValue("code"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	if err := room.Delete(id); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ---------------------------------------------------------------------------
 
 func withCORS(next http.Handler) http.Handler {
@@ -248,7 +267,7 @@ func withCORS(next http.Handler) http.Handler {
 		if origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 		if r.Method == http.MethodOptions {

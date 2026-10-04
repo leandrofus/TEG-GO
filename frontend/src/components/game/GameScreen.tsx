@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { RoomState, CountryDef, CombatResultData } from '../../types/game';
+import type { RoomState, CountryDef, CombatResultData, CardState } from '../../types/game';
 import { COLOR_CONFIG } from '../../types/game';
 import { wsService } from '../../services/websocket';
 import { soundEngine } from '../../services/audio';
@@ -8,8 +8,10 @@ import { GameControls } from './GameControls';
 import { ContinentBonusPanel } from './ContinentBonusPanel';
 import { CardModal } from './CardModal';
 import { CombatModal } from './CombatModal';
+import { NewCardModal } from './NewCardModal';
+import { RulesModal } from './RulesModal';
 import { useBoardEvents } from './useBoardEvents';
-import { Trophy, PauseCircle, Bot, Eye, LogOut, Flag } from 'lucide-react';
+import { Trophy, PauseCircle, Bot, Eye, LogOut, Flag, HelpCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface GameScreenProps {
@@ -35,6 +37,19 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
   const closeCombat = useCallback(() => setShownCombat(null), []);
   const [showCardsModal, setShowCardsModal] = useState(false);
   const [hoveredContinent, setHoveredContinent] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
+
+  // Tarjetas que acabo de recibir: se detectan comparando con las que tenía
+  const myCards = myState?.cards ?? [];
+  const cardKey = myCards.map((c) => c.countryId).join(',');
+  const [prevCardKey, setPrevCardKey] = useState(cardKey);
+  const [newCards, setNewCards] = useState<CardState[]>([]);
+  if (cardKey !== prevCardKey) {
+    const before = new Set(prevCardKey.split(',').filter(Boolean).map(Number));
+    const added = myCards.filter((c) => !before.has(c.countryId));
+    setPrevCardKey(cardKey);
+    if (added.length > 0) setNewCards(added);
+  }
   const events = useBoardEvents();
 
   const myColorRef = useRef(myColor);
@@ -182,6 +197,11 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
         />
       )}
 
+      {newCards.length > 0 && (
+        <NewCardModal cards={newCards} countries={countries} onClose={() => setNewCards([])} />
+      )}
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+
       {/* Mapa (3/4 del ancho, todo el alto) */}
       <div className="col-span-3 min-h-0 relative">
         {shownCombat && (
@@ -249,6 +269,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
                 </span>
               )
             )}
+            <button
+              onClick={() => setShowRules(true)}
+              title="Reglas"
+              className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-slate-800"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
             <button
               onClick={() => (spectator ? wsService.leaveRoom() : wsService.exitRoom())}
               title={spectator ? 'Dejar de mirar' : 'Volver al navegador (podés retomarla después)'}

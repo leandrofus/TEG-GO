@@ -875,7 +875,7 @@ const countryUnder = (mx: number, my: number): number | null => {
   return null;
 };
 
-const BADGE_RADIUS = 4.5; // radio de la ficha de tropas, en px del tablero
+const BADGE_RADIUS = 7; // radio de la ficha de tropas, en px del tablero
 const COAST_TOLERANCE = 4; // cuánto mar alrededor de la costa sigue contando
 
 // País a seleccionar en (mx, my): primero la ficha de tropas (es el blanco más
@@ -1218,10 +1218,13 @@ export const TegMap: React.FC<TegMapProps> = ({
                   style={{
                     left: `${((c.fx - c.x) / c.w) * 100}%`,
                     top: `${((c.fy - c.y) / c.h) * 100}%`,
+                    width: "max(26px, calc(var(--u) * 14))",
+                    height: "max(26px, calc(var(--u) * 14))",
+                    fontSize: "max(13px, calc(var(--u) * 7.5))",
                     backgroundColor:
                       showContinents && !isFrom && !isTo ? ownerHex : undefined,
                   }}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] text-white shadow-lg pointer-events-none transition-transform ${
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full flex items-center justify-center font-black leading-none text-white shadow-lg pointer-events-none transition-transform ${
                     isFrom
                       ? "bg-amber-500 scale-125 ring-2 ring-amber-300"
                       : isTo

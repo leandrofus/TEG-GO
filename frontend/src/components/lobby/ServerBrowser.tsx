@@ -19,7 +19,10 @@ import {
   Play,
   Hash,
   X,
+  Trash2,
+  HelpCircle,
 } from 'lucide-react';
+import { RulesModal } from '../game/RulesModal';
 
 interface ServerBrowserProps {
   me: Me;
@@ -89,6 +92,7 @@ export const ServerBrowser: React.FC<ServerBrowserProps> = ({ me, onJoin, onCrea
   const [showCreate, setShowCreate] = useState(false);
   const [passwordFor, setPasswordFor] = useState<{ code: string; spectate: boolean } | null>(null);
   const [joinCode, setJoinCode] = useState('');
+  const [showRules, setShowRules] = useState(false);
 
   const refresh = useCallback(
     () =>
@@ -161,6 +165,17 @@ export const ServerBrowser: React.FC<ServerBrowserProps> = ({ me, onJoin, onCrea
     else onJoin(room.code, { spectate });
   };
 
+  const deleteRoom = (room: RoomSummary) => {
+    if (!window.confirm(`¿Borrar la sala "${room.name}"? No se puede deshacer.`)) return;
+    api.deleteRoom(room.code).then(
+      () => {
+        setSelectedCode(null);
+        refresh();
+      },
+      (e: Error) => window.alert(e.message),
+    );
+  };
+
   const toggle = (on: boolean, label: string, onClick: () => void) => (
     <button
       onClick={onClick}
@@ -211,6 +226,12 @@ export const ServerBrowser: React.FC<ServerBrowserProps> = ({ me, onJoin, onCrea
               </span>
             )}
           </span>
+          <button
+            onClick={() => setShowRules(true)}
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-white px-2 py-1.5 rounded-md hover:bg-slate-800 transition"
+          >
+            <HelpCircle className="w-4 h-4" /> Reglas
+          </button>
           <button
             onClick={onLogout}
             className="flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-white px-2 py-1.5 rounded-md hover:bg-slate-800 transition"
@@ -354,7 +375,7 @@ export const ServerBrowser: React.FC<ServerBrowserProps> = ({ me, onJoin, onCrea
         {/* Detalle */}
         <aside className="w-80 shrink-0 border-l border-slate-800 bg-slate-900/40 flex flex-col">
           {selected ? (
-            <RoomDetail room={selected} onAction={join} />
+            <RoomDetail room={selected} onAction={join} onDelete={deleteRoom} />
           ) : (
             <div className="flex-1 flex items-center justify-center p-6 text-center text-sm text-slate-500">
               Elegí una sala para ver quién está jugando.
@@ -393,6 +414,7 @@ export const ServerBrowser: React.FC<ServerBrowserProps> = ({ me, onJoin, onCrea
         </aside>
       </div>
 
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
       {showCreate && (
         <CreateRoomDialog
           defaultName={`Sala de ${me.name}`}
@@ -439,10 +461,11 @@ const SortHeader: React.FC<{
   </th>
 );
 
-const RoomDetail: React.FC<{ room: RoomSummary; onAction: (room: RoomSummary, spectate: boolean) => void }> = ({
-  room,
-  onAction,
-}) => {
+const RoomDetail: React.FC<{
+  room: RoomSummary;
+  onAction: (room: RoomSummary, spectate: boolean) => void;
+  onDelete: (room: RoomSummary) => void;
+}> = ({ room, onAction, onDelete }) => {
   const action = primaryAction(room);
   const empty = Math.max(room.maxPlayers - room.seats.length, 0);
   return (
@@ -504,6 +527,14 @@ const RoomDetail: React.FC<{ room: RoomSummary; onAction: (room: RoomSummary, sp
             className="w-full flex items-center justify-center gap-2 border border-slate-700 hover:border-slate-500 text-slate-200 font-bold py-2 rounded-lg transition text-sm"
           >
             <Eye className="w-4 h-4" /> Mirar
+          </button>
+        )}
+        {room.canDelete && (
+          <button
+            onClick={() => onDelete(room)}
+            className="w-full flex items-center justify-center gap-2 border border-rose-900/60 hover:border-rose-500 text-rose-300 hover:text-rose-200 font-bold py-2 rounded-lg transition text-sm"
+          >
+            <Trash2 className="w-4 h-4" /> Borrar sala
           </button>
         )}
       </div>

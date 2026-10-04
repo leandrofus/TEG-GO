@@ -122,3 +122,28 @@ func TestLeavingWaitingRoomPassesHost(t *testing.T) {
 		t.Error("la sala vacía no se borró")
 	}
 }
+
+func TestDeleteOnlyByHostWithoutOtherHumans(t *testing.T) {
+	m := NewManager(nil)
+	r, _ := m.Create("Prueba", 4, "")
+	ana, beto := player(1, "Ana"), player(2, "Beto")
+	_ = r.Join(ana, "", false)
+	_ = r.Join(beto, "", false)
+	if err := r.Delete(ana.Identity); err == nil {
+		t.Fatal("se borró la sala con otro jugador adentro")
+	}
+	r.Leave(beto)
+	_ = r.AddBot(ana)
+	if err := r.Delete(beto.Identity); err == nil {
+		t.Fatal("alguien que no es el anfitrión borró la sala")
+	}
+	if !r.Summary(ana.Identity).CanDelete {
+		t.Error("el anfitrión solo con bots debería poder borrar la sala")
+	}
+	if err := r.Delete(ana.Identity); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Get(r.Code); err == nil {
+		t.Error("la sala sigue existiendo después de borrarla")
+	}
+}

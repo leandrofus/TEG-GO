@@ -19,6 +19,14 @@ export const CONTINENT_COLORS: Record<string, string> = {
   Oceanía: '#4fb0a8',
 };
 
+// Figuras de las tarjetas de país
+export const FIGURE_LABELS: Record<string, string> = {
+  cannon: '💣 Cañón',
+  balloon: '🎈 Globo',
+  ship: '⛵ Barco',
+  wildcard: '⭐ Comodín',
+};
+
 export type Phase =
   | 'lobby'
   | 'initial_placement_1'
@@ -148,6 +156,8 @@ export interface RoomSummary {
   createdAt: string;
   seats: SeatView[];
   mine: boolean;
+  // Soy el anfitrión y no quedan otros jugadores humanos
+  canDelete: boolean;
 }
 
 export interface Me {
