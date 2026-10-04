@@ -45,7 +45,7 @@ class WebSocketService {
       };
       ws.onerror = () => {
         this.connecting = null;
-        reject(new Error('No se pudo conectar con el servidor de TEG.'));
+        reject(new Error('No se pudo conectar con el servidor de TEG GO.'));
       };
       ws.onclose = () => {
         this.connecting = null;
