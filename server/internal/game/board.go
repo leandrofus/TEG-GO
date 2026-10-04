@@ -3,6 +3,7 @@ package game
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 )
 
 type PlayerState struct {
@@ -42,6 +43,9 @@ type GameBoard struct {
 	Winner           Color                  `json:"winner,omitempty"`
 	PendingConquest  *PendingConquest       `json:"pendingConquest,omitempty"`
 	Logs             []string               `json:"logs"`
+	// Sorteo inicial de turnos y número de ronda (0 durante la colocación inicial)
+	TurnDraw []TurnDraw `json:"turnDraw,omitempty"`
+	Round    int        `json:"round"`
 }
 
 // PendingConquest es una conquista recién hecha en la que el atacante todavía
@@ -200,7 +204,54 @@ func ShuffledMissions() []MissionDef {
 	return out
 }
 
-// ShuffleColors sortea el orden de los turnos.
-func ShuffleColors(order []Color) {
-	rand.Shuffle(len(order), func(i, j int) { order[i], order[j] = order[j], order[i] })
+// TurnDraw es la tirada de un jugador en el sorteo inicial de turnos: su dado
+// y, si empató, los dados de cada desempate.
+type TurnDraw struct {
+	Color Color `json:"color"`
+	Rolls []int `json:"rolls"`
+}
+
+// DrawTurnOrder sortea el orden de los turnos: cada jugador tira un dado y
+// empieza el que saca más. Los que empatan vuelven a tirar entre ellos hasta
+// desempatar. Devuelve el orden y las tiradas, en ese mismo orden.
+func DrawTurnOrder(colors []Color) ([]Color, []TurnDraw) {
+	draws := make([]*TurnDraw, len(colors))
+	for i, c := range colors {
+		draws[i] = &TurnDraw{Color: c}
+	}
+
+	var roll func(group []*TurnDraw)
+	roll = func(group []*TurnDraw) {
+		tied := map[int][]*TurnDraw{}
+		for _, d := range group {
+			v := rand.Intn(6) + 1
+			d.Rolls = append(d.Rolls, v)
+			tied[v] = append(tied[v], d)
+		}
+		for _, g := range tied {
+			if len(g) > 1 {
+				roll(g)
+			}
+		}
+	}
+	roll(draws)
+
+	// Los que no empataron se distinguen antes de que se acaben sus tiradas
+	sort.Slice(draws, func(i, j int) bool {
+		a, b := draws[i].Rolls, draws[j].Rolls
+		for k := 0; k < len(a) && k < len(b); k++ {
+			if a[k] != b[k] {
+				return a[k] > b[k]
+			}
+		}
+		return false
+	})
+
+	order := make([]Color, len(draws))
+	out := make([]TurnDraw, len(draws))
+	for i, d := range draws {
+		order[i] = d.Color
+		out[i] = *d
+	}
+	return order, out
 }

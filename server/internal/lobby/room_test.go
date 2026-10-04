@@ -45,7 +45,73 @@ func startedRoom(t *testing.T) (*Room, *Conn, *Conn) {
 	if err := r.Start(ana); err != nil {
 		t.Fatal(err)
 	}
+	pickAll(t, r, map[*Seat]*Conn{r.seatOf(ana): ana, r.seatOf(beto): beto})
 	return r, ana, beto
+}
+
+// pickAll hace que cada jugador elija, en el orden sorteado, el primer color libre.
+func pickAll(t *testing.T, r *Room, conns map[*Seat]*Conn) {
+	t.Helper()
+	for r.picking() {
+		next := r.nextPicker()
+		for _, c := range game.AllColors {
+			if s := r.seatByColor(c); s == nil || !s.Picked {
+				if err := r.PickColor(conns[next], c); err != nil {
+					t.Fatal(err)
+				}
+				break
+			}
+		}
+	}
+	if r.Board == nil {
+		t.Fatal("la partida no empezó después de elegir los colores")
+	}
+}
+
+func TestColorPickFollowsDrawOrder(t *testing.T) {
+	m := NewManager(nil)
+	r, _ := m.Create("Prueba", 4, "")
+	ana, beto := player(1, "Ana"), player(2, "Beto")
+	_ = r.Join(ana, "", false)
+	_ = r.Join(beto, "", false)
+	if err := r.Start(ana); err != nil {
+		t.Fatal(err)
+	}
+	if r.Board != nil || r.status() != StatusPicking {
+		t.Fatal("la partida empezó sin elegir colores")
+	}
+	if err := r.Join(player(3, "Caro"), "", false); err == nil {
+		t.Error("alguien entró a jugar mientras se elegían colores")
+	}
+
+	first, second := ana, beto
+	if r.nextPicker() != r.seatOf(ana) {
+		first, second = beto, ana
+	}
+	if err := r.PickColor(second, game.ColorGreen); err == nil {
+		t.Fatal("eligió color alguien al que no le tocaba")
+	}
+	// El primero se queda con el color que tenía provisoriamente el otro
+	taken := r.seatOf(second).Color
+	if err := r.PickColor(first, taken); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.PickColor(second, taken); err == nil {
+		t.Fatal("eligió un color que ya estaba elegido")
+	}
+	if err := r.PickColor(second, game.ColorMagenta); err != nil {
+		t.Fatal(err)
+	}
+
+	if r.Board == nil {
+		t.Fatal("la partida no empezó")
+	}
+	if got := r.Board.TurnOrder; got[0] != taken || got[1] != game.ColorMagenta {
+		t.Errorf("orden de turnos %v, se esperaba [%s magenta]", got, taken)
+	}
+	if r.seatOf(first).Color != taken || r.seatOf(second).Color != game.ColorMagenta {
+		t.Error("los lugares no quedaron con los colores elegidos")
+	}
 }
 
 func TestDisconnectPausesAndReconnectResumes(t *testing.T) {

@@ -144,7 +144,7 @@ func (m *Manager) Restore(ctx context.Context) error {
 			}
 		}
 		m.rooms[r.Code] = r
-		if r.Board != nil {
+		if r.started() {
 			r.Mu.Lock()
 			r.startBotLoop()
 			r.Mu.Unlock()
@@ -170,7 +170,7 @@ func (m *Manager) StartJanitor(idle time.Duration) {
 			now := time.Now()
 			for _, r := range rooms {
 				r.Mu.Lock()
-				active := r.Board != nil || len(r.spectators) > 0
+				active := r.started() || len(r.spectators) > 0
 				for _, s := range r.Seats {
 					active = active || s.conn != nil
 				}

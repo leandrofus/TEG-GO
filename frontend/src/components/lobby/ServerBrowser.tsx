@@ -53,7 +53,7 @@ const loadFilters = (): Filters => {
   }
 };
 
-const STATUS_ORDER = { waiting: 0, playing: 1, finished: 2 };
+const STATUS_ORDER = { waiting: 0, picking: 1, playing: 2, finished: 3 };
 
 const timeAgo = (iso: string) => {
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -68,7 +68,9 @@ const StatusBadge: React.FC<{ room: RoomSummary }> = ({ room }) => {
   const [label, cls] =
     room.status === 'waiting'
       ? ['Esperando', 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30']
-      : room.paused
+      : room.status === 'picking'
+        ? ['Eligiendo colores', 'text-sky-300 bg-sky-500/10 border-sky-500/30']
+        : room.paused
         ? ['En pausa', 'text-slate-300 bg-slate-500/10 border-slate-500/30']
         : ['En curso', 'text-amber-300 bg-amber-500/10 border-amber-500/30'];
   return <span className={`inline-block px-2 py-0.5 rounded-md border text-[11px] font-bold ${cls}`}>{label}</span>;
@@ -76,7 +78,7 @@ const StatusBadge: React.FC<{ room: RoomSummary }> = ({ room }) => {
 
 // Acción principal según la sala: retomar la mía, unirse si hay lugar, o mirar
 const primaryAction = (room: RoomSummary): { label: string; spectate: boolean } | null => {
-  if (room.mine) return { label: room.status === 'waiting' ? 'Volver a la sala' : 'Retomar', spectate: false };
+  if (room.mine) return { label: room.status === 'playing' ? 'Retomar' : 'Volver a la sala', spectate: false };
   if (room.status === 'waiting' && room.players < room.maxPlayers) return { label: 'Unirse', spectate: false };
   return { label: 'Mirar', spectate: true };
 };

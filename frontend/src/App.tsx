@@ -5,6 +5,7 @@ import { wsService } from './services/websocket';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { ServerBrowser } from './components/lobby/ServerBrowser';
 import { WaitingRoom } from './components/lobby/WaitingRoom';
+import { ColorPick } from './components/lobby/ColorPick';
 import { GameScreen } from './components/game/GameScreen';
 import { AlertCircle, Loader2, WifiOff } from 'lucide-react';
 
@@ -39,6 +40,7 @@ export function App() {
             name: p.name,
             status: p.status,
             started: p.started,
+            picking: p.picking,
             maxPlayers: p.maxPlayers,
             private: p.private,
             seats: p.seats || [],
@@ -118,6 +120,8 @@ export function App() {
     screen = (
       <ServerBrowser me={me} onJoin={joinRoom} onCreate={createRoom} onQuickMatch={quickMatch} onLogout={logout} />
     );
+  } else if (room.picking) {
+    screen = <ColorPick room={room} />;
   } else if (!room.started) {
     screen = <WaitingRoom room={room} />;
   } else {

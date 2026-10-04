@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { RoomState, CountryDef, CombatResultData, CardState } from '../../types/game';
-import { COLOR_CONFIG } from '../../types/game';
+import { COLOR_CONFIG, PHASE_NAMES } from '../../types/game';
 import { wsService } from '../../services/websocket';
 import { soundEngine } from '../../services/audio';
 import { TegMap } from '../map/TegMap';
@@ -10,6 +10,9 @@ import { CardModal } from './CardModal';
 import { CombatModal } from './CombatModal';
 import { NewCardModal } from './NewCardModal';
 import { RulesModal } from './RulesModal';
+import { TurnDrawModal } from './TurnDrawModal';
+import { TurnOrderPanel } from './TurnOrderPanel';
+import { nextAliveIndex } from './turns';
 import { useBoardEvents } from './useBoardEvents';
 import { Trophy, PauseCircle, Bot, Eye, LogOut, Flag, HelpCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -38,6 +41,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
   const [showCardsModal, setShowCardsModal] = useState(false);
   const [hoveredContinent, setHoveredContinent] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
+
+  const [showDraw, setShowDraw] = useState(false);
 
   // Tarjetas que acabo de recibir: se detectan comparando con las que tenía
   const myCards = myState?.cards ?? [];
@@ -78,6 +83,25 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
   useEffect(() => {
     if (board.winner) confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
   }, [board.winner]);
+
+  // Cartel de "¡Tu turno!" cada vez que me toca (en la colocación inicial cada
+  // ronda cuenta como un turno distinto)
+  const placing = board.currentPhase.startsWith('initial_placement');
+  const myTurnKey = `${board.round}-${board.currentTurnIndex}-${placing ? board.currentPhase : ''}`;
+  const [prevMyTurnKey, setPrevMyTurnKey] = useState(myTurnKey);
+  const [turnSplash, setTurnSplash] = useState(false);
+  if (myTurnKey !== prevMyTurnKey) {
+    setPrevMyTurnKey(myTurnKey);
+    if (myColor && currentColor === myColor && !board.winner) setTurnSplash(true);
+  }
+  useEffect(() => {
+    if (!turnSplash) return;
+    const t = setTimeout(() => setTurnSplash(false), 1800);
+    return () => clearTimeout(t);
+  }, [turnSplash]);
+
+  const currentPlayer = board.players[currentColor];
+  const nextPlayer = board.players[board.turnOrder[nextAliveIndex(board, board.currentTurnIndex)]];
 
   const clearSelection = () => {
     setSelectedFromId(null);
@@ -201,6 +225,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
         <NewCardModal cards={newCards} countries={countries} onClose={() => setNewCards([])} />
       )}
       {showRules && <RulesModal onClose={() => setShowRules(false)} />}
+      {showDraw && board.turnDraw && (
+        <TurnDrawModal draws={board.turnDraw} players={board.players} myColor={myColor} onClose={() => setShowDraw(false)} />
+      )}
 
       {/* Mapa (3/4 del ancho, todo el alto) */}
       <div className="col-span-3 min-h-0 relative">
@@ -236,6 +263,44 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
                     ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Indicador de turno: quién juega, en qué fase y quién sigue */}
+        {!board.winner && currentPlayer && (
+          <div className="absolute bottom-3 inset-x-0 z-[55] flex justify-center pointer-events-none px-4">
+            <div
+              className={`flex items-center gap-3 rounded-full border px-4 py-1.5 shadow-2xl bg-slate-950/90 text-sm ${
+                currentColor === myColor ? 'border-amber-400 shadow-amber-500/20' : 'border-slate-700'
+              }`}
+            >
+              {board.round > 0 && <span className="text-xs font-bold text-slate-400">Ronda {board.round}</span>}
+              <span className="flex items-center gap-1.5 font-extrabold text-white">
+                <span
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: COLOR_CONFIG[currentColor]?.hex }}
+                />
+                {currentColor === myColor ? 'Te toca a vos' : `Juega ${currentPlayer.name}`}
+              </span>
+              <span className="text-xs text-slate-300">{PHASE_NAMES[board.currentPhase]}</span>
+              {nextPlayer && nextPlayer.color !== currentColor && (
+                <span className="flex items-center gap-1 text-xs text-slate-400 border-l border-slate-700 pl-3">
+                  Sigue
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: COLOR_CONFIG[nextPlayer.color]?.hex }} />
+                  <span className="font-bold text-slate-200">
+                    {nextPlayer.color === myColor ? 'vos' : nextPlayer.name}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {turnSplash && !showDraw && (
+          <div className="absolute inset-0 z-[58] flex items-center justify-center pointer-events-none">
+            <div className="turn-splash bg-amber-500 text-slate-950 font-black text-3xl uppercase tracking-wide px-8 py-4 rounded-2xl shadow-2xl">
+              ¡Tu turno!
             </div>
           </div>
         )}
@@ -309,6 +374,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({ room, countries, notify 
             </button>
           </div>
         )}
+
+        <TurnOrderPanel board={board} myColor={myColor} onShowDraw={() => setShowDraw(true)} />
 
         <GameControls
           board={board}

@@ -65,6 +65,8 @@ func (g *GameBoard) NextTurnPlacement(nextPhase Phase, nextTroops int) {
 	g.CurrentTurnIndex = 0
 	p := g.CurrentPlayer()
 	if nextPhase == PhaseTradeCards {
+		g.Round = 1
+		g.AddLog("Comienza la ronda 1.")
 		g.StartTurn(p.Color)
 		return
 	}
@@ -285,6 +287,7 @@ func (g *GameBoard) EndTurn(color Color) error {
 	}
 
 	// Advance turn to next active player (los eliminados no juegan)
+	prev := g.CurrentTurnIndex
 	for i := 0; i < len(g.TurnOrder); i++ {
 		g.CurrentTurnIndex = (g.CurrentTurnIndex + 1) % len(g.TurnOrder)
 		if g.CurrentPlayer().IsAlive {
@@ -292,6 +295,10 @@ func (g *GameBoard) EndTurn(color Color) error {
 		}
 	}
 	nextPlayer := g.CurrentPlayer()
+	if g.CurrentTurnIndex <= prev {
+		g.Round++
+		g.AddLog(fmt.Sprintf("Comienza la ronda %d.", g.Round))
+	}
 
 	g.StartTurn(nextPlayer.Color)
 	return nil

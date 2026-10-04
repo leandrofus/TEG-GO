@@ -37,6 +37,17 @@ export type Phase =
   | 'rearrange'
   | 'finished';
 
+// Nombre de cada fase para mostrar
+export const PHASE_NAMES: Record<string, string> = {
+  initial_placement_1: 'Colocación inicial · ronda 1 de 2',
+  initial_placement_2: 'Colocación inicial · ronda 2 de 2',
+  trade_cards: 'Canje de tarjetas',
+  add_armies: 'Agregar ejércitos',
+  attack: 'Ataque',
+  rearrange: 'Reagrupar',
+  finished: 'Partida finalizada',
+};
+
 export interface CountryDef {
   id: number;
   name: string;
@@ -90,6 +101,16 @@ export interface GameBoard {
   logs: string[];
   // Conquista recién hecha: el atacante elige cuántos ejércitos pasa (1 a max)
   pendingConquest?: PendingConquest;
+  // Sorteo inicial de turnos (en el orden resultante) y ronda actual
+  // (0 durante la colocación inicial)
+  turnDraw?: TurnDraw[];
+  round: number;
+}
+
+export interface TurnDraw {
+  color: Color;
+  // Primer dado y, si hubo empate, los de cada desempate
+  rolls: number[];
 }
 
 export interface PendingConquest {
@@ -110,7 +131,8 @@ export interface CombatResultData {
   defender: Color;
 }
 
-export type RoomStatus = 'waiting' | 'playing' | 'finished';
+// picking: ya se sortearon los turnos y se están eligiendo colores
+export type RoomStatus = 'waiting' | 'picking' | 'playing' | 'finished';
 
 // Un lugar de la sala, tal como lo manda el server
 export interface SeatView {
@@ -119,6 +141,11 @@ export interface SeatView {
   isBot: boolean;
   isHost: boolean;
   connected: boolean;
+  // Mientras se eligen colores: puesto en el sorteo, dados y si ya eligió
+  // (si no eligió, color es provisorio)
+  order?: number;
+  rolls?: number[];
+  picked?: boolean;
 }
 
 // Quién soy en la sala actual
@@ -133,6 +160,7 @@ export interface RoomState {
   name: string;
   status: RoomStatus;
   started: boolean;
+  picking: boolean;
   maxPlayers: number;
   private: boolean;
   seats: SeatView[];

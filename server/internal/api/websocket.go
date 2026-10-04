@@ -107,6 +107,8 @@ func (s *Server) dispatch(room *lobby.Room, conn *lobby.Conn, msg wsMessage) err
 		return room.RemoveSeat(conn, msg.Color)
 	case "START_GAME":
 		return room.Start(conn)
+	case "PICK_COLOR":
+		return room.PickColor(conn, msg.Color)
 	case "REPLACE_WITH_BOT":
 		return room.ReplaceWithBot(conn, msg.Color)
 

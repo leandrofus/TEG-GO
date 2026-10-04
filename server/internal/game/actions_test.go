@@ -147,3 +147,48 @@ func TestRearrangeAfterConquest(t *testing.T) {
 		t.Errorf("Argentina no pudo mover sus %d ejércitos libres: %v", free, err)
 	}
 }
+
+func TestDrawTurnOrder(t *testing.T) {
+	colors := []Color{ColorRed, ColorBlue, ColorGreen, ColorYellow, ColorBlack, ColorMagenta}
+	for n := 0; n < 200; n++ {
+		order, draws := DrawTurnOrder(colors)
+		if len(order) != len(colors) || len(draws) != len(colors) {
+			t.Fatalf("orden incompleto: %v", order)
+		}
+		seen := map[Color]bool{}
+		for i, d := range draws {
+			if d.Color != order[i] || seen[d.Color] {
+				t.Fatalf("tiradas y orden no coinciden: %v %v", order, draws)
+			}
+			seen[d.Color] = true
+			if i == 0 {
+				continue
+			}
+			// Cada jugador queda detrás del anterior por la primera tirada distinta
+			a, b := draws[i-1].Rolls, d.Rolls
+			k := 0
+			for k < len(a) && k < len(b) && a[k] == b[k] {
+				k++
+			}
+			if k == len(a) || k == len(b) || a[k] < b[k] {
+				t.Fatalf("desempate mal resuelto: %v antes que %v", a, b)
+			}
+		}
+	}
+}
+
+func TestRoundAdvancesWhenOrderWraps(t *testing.T) {
+	players := map[Color]*PlayerState{ColorRed: {Color: ColorRed}, ColorBlue: {Color: ColorBlue}}
+	g := NewGameBoard(players, []Color{ColorRed, ColorBlue})
+	g.CurrentPhase = PhaseAttack
+	g.Round = 1
+	_ = g.EndTurn(ColorRed)
+	if g.Round != 1 {
+		t.Fatalf("ronda %d a mitad de vuelta, se esperaba 1", g.Round)
+	}
+	g.CurrentPhase = PhaseAttack
+	_ = g.EndTurn(ColorBlue)
+	if g.Round != 2 || g.CurrentTurnIndex != 0 {
+		t.Fatalf("ronda %d, turno %d; se esperaba ronda 2 y turno 0", g.Round, g.CurrentTurnIndex)
+	}
+}

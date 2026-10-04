@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { GameBoard, Color, CountryDef, CombatResultData } from '../../types/game';
-import { COLOR_CONFIG } from '../../types/game';
+import { COLOR_CONFIG, PHASE_NAMES } from '../../types/game';
 import { wsService } from '../../services/websocket';
 import { Swords, ScrollText, Award, Layers, Minus, Plus, ArrowRight, Hourglass, Flag, Move } from 'lucide-react';
 
@@ -14,16 +14,6 @@ interface GameControlsProps {
   onOpenCards: () => void;
   onClearSelection: () => void;
 }
-
-const PHASE_NAMES: Record<string, string> = {
-  initial_placement_1: 'Colocación inicial · ronda 1 de 2',
-  initial_placement_2: 'Colocación inicial · ronda 2 de 2',
-  trade_cards: 'Canje de tarjetas',
-  add_armies: 'Agregar ejércitos',
-  attack: 'Ataque',
-  rearrange: 'Reagrupar',
-  finished: 'Partida finalizada',
-};
 
 // Pasos de un turno normal, para mostrar en qué parte del turno estás
 const TURN_STEPS = [

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/rand"
+	"sort"
 	"sync"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 
 const (
 	StatusWaiting  = "waiting"
+	StatusPicking  = "picking" // sorteados los turnos, eligiendo colores
 	StatusPlaying  = "playing"
 	StatusFinished = "finished"
 )
@@ -31,6 +34,12 @@ type Seat struct {
 	GuestToken string     `json:"guestToken,omitempty"`
 	IsBot      bool       `json:"isBot"`
 	IsHost     bool       `json:"isHost"`
+
+	// Sorteo de turnos: puesto (1 = empieza), dados tirados (con desempates)
+	// y si ya eligió color. Mientras no eligió, Color es provisorio.
+	Order  int   `json:"order,omitempty"`
+	Rolls  []int `json:"rolls,omitempty"`
+	Picked bool  `json:"picked,omitempty"`
 
 	conn *Conn
 }
@@ -60,6 +69,8 @@ type Room struct {
 	manager *Manager
 	closed  bool
 	botLoop bool
+	// Los bots esperan a que se vea el sorteo antes de elegir color
+	botPickAt time.Time
 }
 
 func (r *Room) Private() bool { return r.passwordHash != "" }
@@ -70,6 +81,8 @@ func (r *Room) checkPassword(pw string) bool {
 
 func (r *Room) status() string {
 	switch {
+	case r.picking():
+		return StatusPicking
 	case r.Board == nil:
 		return StatusWaiting
 	case r.Board.CurrentPhase == game.PhaseFinished:
@@ -95,6 +108,33 @@ func (r *Room) waitingFor() []string {
 		names = append(names, s.Name)
 	}
 	return names
+}
+
+// picking dice si ya se sortearon los turnos y se están eligiendo colores.
+func (r *Room) picking() bool {
+	if r.Board != nil {
+		return false
+	}
+	for _, s := range r.Seats {
+		if s.Order > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// started dice si ya no se puede entrar a jugar ni cambiar los lugares.
+func (r *Room) started() bool { return r.Board != nil || r.picking() }
+
+// nextPicker es el próximo en elegir color, según el sorteo.
+func (r *Room) nextPicker() *Seat {
+	var next *Seat
+	for _, s := range r.Seats {
+		if s.Order > 0 && !s.Picked && (next == nil || s.Order < next.Order) {
+			next = s
+		}
+	}
+	return next
 }
 
 func (r *Room) seatOf(c *Conn) *Seat {
@@ -194,7 +234,7 @@ func (r *Room) Join(c *Conn, password string, spectate bool) error {
 		r.broadcast()
 		return nil
 	}
-	if r.Board != nil {
+	if r.started() {
 		return fmt.Errorf("la partida ya empezó; podés entrar como espectador")
 	}
 	if len(r.Seats) >= r.MaxPlayers {
@@ -229,7 +269,7 @@ func (r *Room) Leave(c *Conn) {
 		return
 	}
 
-	if r.Board == nil {
+	if !r.started() {
 		r.removeSeat(seat)
 	} else {
 		r.toBot(seat, "abandonó la partida")
@@ -334,7 +374,7 @@ func (r *Room) AddBot(c *Conn) error {
 	if err := r.requireHost(c); err != nil {
 		return err
 	}
-	if r.Board != nil || len(r.Seats) >= r.MaxPlayers {
+	if r.started() || len(r.Seats) >= r.MaxPlayers {
 		return fmt.Errorf("no hay lugar para otro bot")
 	}
 	bots := 0
@@ -355,7 +395,7 @@ func (r *Room) RemoveSeat(c *Conn, color game.Color) error {
 	if err := r.requireHost(c); err != nil {
 		return err
 	}
-	if r.Board != nil {
+	if r.started() {
 		return fmt.Errorf("la partida ya empezó")
 	}
 	seat := r.seatByColor(color)
@@ -379,7 +419,7 @@ func (r *Room) ReplaceWithBot(c *Conn, color game.Color) error {
 		return err
 	}
 	seat := r.seatByColor(color)
-	if r.Board == nil || seat == nil || seat.IsBot || seat.conn != nil {
+	if !r.started() || seat == nil || seat.IsBot || seat.conn != nil {
 		return fmt.Errorf("solo se puede reemplazar a un jugador desconectado")
 	}
 	r.toBot(seat, "no volvió")
@@ -387,23 +427,95 @@ func (r *Room) ReplaceWithBot(c *Conn, color game.Color) error {
 	return nil
 }
 
+// Start sortea el orden de los turnos. Después cada uno elige color en ese
+// orden (ver PickColor) y, cuando eligieron todos, empieza la partida.
 func (r *Room) Start(c *Conn) error {
 	r.Mu.Lock()
 	defer r.Mu.Unlock()
 	if err := r.requireHost(c); err != nil {
 		return err
 	}
-	if r.Board != nil {
+	if r.started() {
 		return fmt.Errorf("la partida ya empezó")
 	}
 	if len(r.Seats) < 2 {
 		return fmt.Errorf("se necesitan al menos 2 jugadores para comenzar")
 	}
 
-	players := make(map[game.Color]*game.PlayerState)
-	order := make([]game.Color, 0, len(r.Seats))
+	colors := make([]game.Color, 0, len(r.Seats))
+	for _, s := range r.Seats {
+		colors = append(colors, s.Color)
+	}
+	_, draws := game.DrawTurnOrder(colors)
+	for i, d := range draws {
+		seat := r.seatByColor(d.Color)
+		seat.Order = i + 1
+		seat.Rolls = d.Rolls
+		seat.Picked = false
+	}
+	r.botPickAt = time.Now().Add(botPickDelay)
+	r.startBotLoop()
+	r.changed()
+	return nil
+}
+
+// PickColor elige el color del jugador al que le toca elegir.
+func (r *Room) PickColor(c *Conn, color game.Color) error {
+	r.Mu.Lock()
+	defer r.Mu.Unlock()
+	seat := r.seatOf(c)
+	if seat == nil {
+		return fmt.Errorf("no estás en esta partida")
+	}
+	if err := r.pick(seat, color); err != nil {
+		return err
+	}
+	r.changed()
+	return nil
+}
+
+// pick le asigna el color al lugar. Si lo tenía de forma provisoria alguien
+// que todavía no eligió, intercambian. Con el último, empieza la partida.
+func (r *Room) pick(seat *Seat, color game.Color) error {
+	if !r.picking() {
+		return fmt.Errorf("no se están eligiendo colores")
+	}
+	if seat != r.nextPicker() {
+		return fmt.Errorf("todavía no te toca elegir color")
+	}
+	valid := false
+	for _, c := range game.AllColors {
+		valid = valid || c == color
+	}
+	if !valid {
+		return fmt.Errorf("color inválido")
+	}
+	if holder := r.seatByColor(color); holder != nil && holder != seat {
+		if holder.Picked {
+			return fmt.Errorf("ese color ya lo eligió %s", holder.Name)
+		}
+		holder.Color = seat.Color
+	}
+	seat.Color = color
+	seat.Picked = true
+
+	if r.nextPicker() == nil {
+		r.beginGame()
+	}
+	return nil
+}
+
+// beginGame arma el tablero con los colores elegidos y el orden sorteado.
+func (r *Room) beginGame() {
+	seats := append([]*Seat(nil), r.Seats...)
+	sort.Slice(seats, func(i, j int) bool { return seats[i].Order < seats[j].Order })
+
+	players := make(map[game.Color]*game.PlayerState, len(seats))
+	order := make([]game.Color, 0, len(seats))
+	draws := make([]game.TurnDraw, 0, len(seats))
 	missions := game.ShuffledMissions()
-	for i, s := range r.Seats {
+	summary := ""
+	for i, s := range seats {
 		players[s.Color] = &game.PlayerState{
 			Color:   s.Color,
 			Name:    s.Name,
@@ -412,13 +524,19 @@ func (r *Room) Start(c *Conn) error {
 			Mission: missions[i%len(missions)],
 		}
 		order = append(order, s.Color)
+		draws = append(draws, game.TurnDraw{Color: s.Color, Rolls: s.Rolls})
+		if i > 0 {
+			summary += ", "
+		}
+		summary += fmt.Sprintf("%d° %s %v", i+1, s.Name, s.Rolls)
 	}
-	game.ShuffleColors(order)
 
 	r.Board = game.NewGameBoard(players, order)
-	r.startBotLoop()
-	r.changed()
-	return nil
+	r.Board.TurnDraw = draws
+	r.Board.AddLog("Sorteo de turnos: " + summary + ".")
+	for _, s := range r.Seats {
+		s.Order, s.Rolls, s.Picked = 0, nil, false
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -480,6 +598,13 @@ func joinNames(names []string) string {
 // ---------------------------------------------------------------------------
 // Bots
 
+// Tiempo para ver los dados del sorteo antes de que los bots elijan color, y
+// pausa entre la elección de un bot y la siguiente.
+const (
+	botPickDelay = 3500 * time.Millisecond
+	botPickPause = 900 * time.Millisecond
+)
+
 // Pausa extra tras un ataque de un bot, para que los jugadores alcancen a ver
 // el resultado de los dados antes de la siguiente jugada.
 const botCombatPause = 1800 * time.Millisecond
@@ -499,6 +624,15 @@ func (r *Room) runBotLoop() {
 		pause = 0
 
 		r.Mu.Lock()
+		if !r.closed && r.picking() {
+			if s := r.nextPicker(); s != nil && s.IsBot && time.Now().After(r.botPickAt) {
+				_ = r.pick(s, r.botColor())
+				r.changed()
+				pause = botPickPause
+			}
+			r.Mu.Unlock()
+			continue
+		}
 		if r.closed || r.Board == nil || r.Board.CurrentPhase == game.PhaseFinished {
 			r.botLoop = false
 			r.Mu.Unlock()
@@ -521,6 +655,17 @@ func (r *Room) runBotLoop() {
 		}
 		r.Mu.Unlock()
 	}
+}
+
+// botColor elige al azar un color que nadie eligió todavía.
+func (r *Room) botColor() game.Color {
+	var free []game.Color
+	for _, c := range game.AllColors {
+		if s := r.seatByColor(c); s == nil || !s.Picked {
+			free = append(free, c)
+		}
+	}
+	return free[rand.Intn(len(free))]
 }
 
 // ---------------------------------------------------------------------------
@@ -572,6 +717,9 @@ type SeatView struct {
 	IsBot     bool       `json:"isBot"`
 	IsHost    bool       `json:"isHost"`
 	Connected bool       `json:"connected"`
+	Order     int        `json:"order,omitempty"`
+	Rolls     []int      `json:"rolls,omitempty"`
+	Picked    bool       `json:"picked,omitempty"`
 }
 
 type YouView struct {
@@ -583,7 +731,10 @@ type YouView struct {
 func (r *Room) seatViews() []SeatView {
 	out := make([]SeatView, 0, len(r.Seats))
 	for _, s := range r.Seats {
-		out = append(out, SeatView{Color: s.Color, Name: s.Name, IsBot: s.IsBot, IsHost: s.IsHost, Connected: s.IsBot || s.conn != nil})
+		out = append(out, SeatView{
+			Color: s.Color, Name: s.Name, IsBot: s.IsBot, IsHost: s.IsHost, Connected: s.IsBot || s.conn != nil,
+			Order: s.Order, Rolls: s.Rolls, Picked: s.Picked,
+		})
 	}
 	return out
 }
@@ -597,6 +748,7 @@ func (r *Room) broadcast() {
 		"name":       r.Name,
 		"status":     r.status(),
 		"started":    r.Board != nil,
+		"picking":    r.picking(),
 		"maxPlayers": r.MaxPlayers,
 		"private":    r.Private(),
 		"seats":      r.seatViews(),

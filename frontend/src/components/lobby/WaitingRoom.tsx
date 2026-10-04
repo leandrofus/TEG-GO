@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import type { RoomState } from '../../types/game';
-import { COLOR_CONFIG } from '../../types/game';
 import { wsService } from '../../services/websocket';
 import { ArrowLeft, Bot, Crown, Lock, Plus, X, Play, Eye, Copy, Check } from 'lucide-react';
 
@@ -73,10 +72,8 @@ export const WaitingRoom: React.FC<{ room: RoomState }> = ({ room }) => {
                     isMe ? 'border-amber-500/60' : 'border-slate-800'
                   }`}
                 >
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center font-black text-white shrink-0"
-                    style={{ backgroundColor: COLOR_CONFIG[s.color]?.hex }}
-                  >
+                  {/* El color se elige al empezar, en el orden del sorteo */}
+                  <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center font-black text-white shrink-0">
                     {s.isBot ? <Bot className="w-5 h-5" /> : s.name[0]?.toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -85,7 +82,7 @@ export const WaitingRoom: React.FC<{ room: RoomState }> = ({ room }) => {
                       {s.isHost && <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
                     </div>
                     <div className="text-xs text-slate-400">
-                      {isMe ? 'Vos' : s.isBot ? 'Bot' : s.connected ? COLOR_CONFIG[s.color]?.name : 'Desconectado'}
+                      {isMe ? 'Vos' : s.isBot ? 'Bot' : s.connected ? 'Listo' : 'Desconectado'}
                     </div>
                   </div>
                   {isHost && !s.isHost && (
@@ -126,7 +123,7 @@ export const WaitingRoom: React.FC<{ room: RoomState }> = ({ room }) => {
               <p className="text-sm text-slate-400">
                 {room.seats.length < 2
                   ? 'Se necesitan al menos 2 jugadores.'
-                  : `${room.seats.length} jugadores listos. El orden de turnos y las misiones se sortean al empezar.`}
+                  : `${room.seats.length} jugadores listos. Al empezar se sortea el orden de turnos y, en ese orden, cada uno elige su color.`}
               </p>
               <button
                 onClick={() => wsService.startGame()}

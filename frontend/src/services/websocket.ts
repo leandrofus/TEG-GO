@@ -149,6 +149,10 @@ class WebSocketService {
     this.send('START_GAME');
   }
 
+  pickColor(color: string) {
+    this.send('PICK_COLOR', { color });
+  }
+
   replaceWithBot(color: string) {
     this.send('REPLACE_WITH_BOT', { color });
   }
